@@ -5,6 +5,8 @@
 //std includes
 #include <vector>
 #include <iostream>
+#include <string>
+#include <cmath>
 
 //gmp includes
 #include <gmp.h>
@@ -24,7 +26,7 @@ template<typename T> std::ostream& operator<< (std::ostream& out, const std::vec
     for(size_t i = 0; i < v.size(); ++i) {
         out << v[i];
 
-        if (i != last) {
+		if (i != last) {
             out << ", ";
 		}
     }
@@ -36,6 +38,12 @@ template<typename T> std::ostream& operator<< (std::ostream& out, const std::vec
     return out;
 }
 
+bool check(mpz_class n, mpz_vector factors);
+
 /*Math Functions*/
 
+//get all primes less than n with the Sieve of Eratosthenes
 int_vector get_primes(int n);
+
+//calculate the natural logarithim (ln) of a number
+double ln(mpz_class n);

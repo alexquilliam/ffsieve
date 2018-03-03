@@ -1,30 +1,39 @@
-TARGET = ffsieve
-LIBS = -lgmp
-CC = g++
-CFLAGS = -Wall -g
+#partially based off of https://stackoverflow.com/questions/5178125/how-to-place-object-files-in-separate-subdirectory
 
-.PHONY: default all clean
+CC := g++
+TARGET := ffsieve
 
-default: $(TARGET)
-all: default
+SRCDIR := src
+INCDIR := $(shell find include -type d)
+BUILDDIR := obj
+SRCEXT := cpp
 
-INC_DIRS := $(shell find include -type d)
-	C_INC_FLAGS += $(addprefix -I,$(INC_DIRS))
+CFLAGS := -Wall -g
+LIB := -lgmp -lgmpxx
+INC := $(addprefix -I,$(INCDIR))
 
-%.o: %.cpp $(HEADERS)
-	$(CC) $(CFLAGS) $(C_INC_FLAGS) -c $< -o $@
+SOURCES := $(shell find $(SRCDIR) -type f -name *.$(SRCEXT))
+OBJECTS := $(patsubst $(SRCDIR)/%,$(BUILDDIR)/%,$(SOURCES:.$(SRCEXT)=.o))
 
-OBJECTS = $(patsubst %.cpp, %.o, $(shell find . -name '*.cpp'))
-HEADERS = $(shell find . -name '*.hpp')
-
-%.o: %.c $(HEADERS)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-.PRECIOUS: $(TARGET) $(OBJECTS)
-
-$(TARGET): $(OBJECTS)
-	$(CC) $(OBJECTS) -Wall $(LIBS) -o $@
+all: $(TARGET)
 
 clean:
-	find . -type f -name '*.o' -exec rm {} +
-	find . -type f -name $(TARGET) -exec rm {} +
+	@$(RM) -rf $(BUILDDIR)
+
+-include $(OBJECTS:.o=.d)
+
+#Link
+$(TARGET): $(OBJECTS)
+	$(CC) -o $(TARGET) $^ $(LIB)
+
+#Compile
+$(BUILDDIR)/%.o: $(SRCDIR)/%.$(SRCEXT)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(INC) -c $< -o $@
+	@$(CC) $(CFLAGS) $(INCDEP) -MM $(SRCDIR)/$*.$(SRCEXT) > $(BUILDDIR)/$*.d
+	@cp -f $(BUILDDIR)/$*.d $(BUILDDIR)/$*.d.tmp
+	@sed -e 's|.*:|$(BUILDDIR)/$*.o:|' < $(BUILDDIR)/$*.d.tmp > $(BUILDDIR)/$*.d
+	@sed -e 's/.*://' -e 's/\\$$//' < $(BUILDDIR)/$*.d.tmp | fmt -1 | sed -e 's/^ *//' -e 's/$$/:/' >> $(BUILDDIR)/$*.d
+	@rm -f $(BUILDDIR)/$*.d.tmp
+
+.PHONY: all clean
