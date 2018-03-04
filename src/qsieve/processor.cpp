@@ -10,23 +10,39 @@ mpz_vector Processor::process(mpz_class num, mpz_vector bsmooth_values, Matrix m
 	int_vector null_space(mat.size());
 	null_space = mat.get_null_space();
 
-	std::cout << "Final RREF matrix: " << std::endl;
-	std::cout << mat << std::endl;
+	#if DEBUG
+		std::cout << "Final RREF matrix: " << std::endl;
+		std::cout << mat << std::endl;
 
-	std::cout << "Null space: " << std::endl;
-	std::cout << null_space << std::endl;
+		std::cout << "Null space: " << std::endl;
+		std::cout << null_space << std::endl;
+	#endif
 
 	mpz_vector multiples = get_multiples(num, bsmooth_values, null_space);
 
-	std::cout << "\nMultiples: " << std::endl;
-	std::cout << multiples[0] << " and " << multiples[1] << std::endl;
+	#if DEBUG
+		std::cout << "\nMultiples: " << std::endl;
+		std::cout << multiples[0] << " and " << multiples[1] << std::endl;
+	#endif
 
 	mpz_vector factors(2);
 	factors[0] = gcd(num, multiples[0]);
 	factors[1] = gcd(num, multiples[1]);
 
-	std::cout << "\nFactors: " << std::endl;
-	std::cout << factors[0] << " and " << factors[1] << std::endl;
+	#if DEBUG
+		std::cout << "\nFactors before correction: " << std::endl;
+		std::cout << factors[0] << " and " << factors[1] << std::endl;
+	#endif
+
+	//try dividing one of the factors by 2
+	if(!check(num, factors)) {
+		factors[1] /= 2;
+	}
+
+	#if DEBUG
+		std::cout << "\nFactors: " << std::endl;
+		std::cout << factors[0] << " and " << factors[1] << std::endl;
+	#endif
 
 	return factors;
 }

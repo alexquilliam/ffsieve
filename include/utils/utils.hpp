@@ -16,6 +16,9 @@
 typedef std::vector<mpz_class> mpz_vector;
 typedef std::vector<int> int_vector;
 
+//defines
+#define DEBUG 0
+
 /*Print Functions*/
 
 //overload the << operator to print a vector

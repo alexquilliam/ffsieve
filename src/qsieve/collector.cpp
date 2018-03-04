@@ -11,8 +11,10 @@ mpz_vector Collector::collect(mpz_class n) {
 
 	int_vector factor_base = get_factor_base(n, bound);
 
-	std::cout << "\nFactor base:" << std::endl;
-	std::cout << factor_base << std::endl;
+	#if DEBUG
+		std::cout << "\nFactor base:" << std::endl;
+		std::cout << factor_base << std::endl;
+	#endif
 
 	mpz_class mpz_n_sqrt(sqrt(n));
 	long n_sqrt = mpz_n_sqrt.get_ui();
@@ -20,9 +22,6 @@ mpz_vector Collector::collect(mpz_class n) {
 	int num_blocks = 0;
 	mpz_vector poly_values = generate_poly_values(n, n_sqrt + (num_blocks++ * block_size), block_size);
 	poly_values.erase(poly_values.begin()); //remove negative value
-
-	std::cout << "\nPolynomial values:" << std::endl;
-	std::cout << poly_values << std::endl;
 
 	mpz_vector bsmooth_values(0);
 	std::vector<std::vector<int>> exp_vec(0, std::vector<int>(0));
@@ -39,20 +38,29 @@ mpz_vector Collector::collect(mpz_class n) {
 		i++;
 
 		if(i == poly_values.size()) {
-			mpz_vector new_poly_batch = generate_poly_values(n, n_sqrt + (num_blocks++ * block_size), block_size);
-			poly_values.insert(poly_values.end(), new_poly_batch.begin(), new_poly_batch.end());
+			poly_values.clear();
+			std::vector<mpz_class>(0).swap(poly_values);
+			poly_values = generate_poly_values(n, n_sqrt + (num_blocks++ * block_size), block_size);
+			i = 0;
 		}
 	}
 
-	std::cout << "\nb-smooth values:" << std::endl;
-	std::cout << bsmooth_values << std::endl;
+	#if DEBUG
+		std::cout << "\nPolynomial values:" << std::endl;
+		std::cout << poly_values << std::endl;
 
-	std::cout << "\nb-smooth values size: " << bsmooth_values.size() << ", factor base size: " << factor_base.size() << std::endl;
+		std::cout << "\nb-smooth values:" << std::endl;
+		std::cout << bsmooth_values << std::endl;
+
+		std::cout << "\nb-smooth values size: " << bsmooth_values.size() << ", factor base size: " << factor_base.size() << std::endl;
+	#endif
 
 	exp_matrix = Matrix(exp_vec);
 
-	std::cout << "\nInput exponent matrix: " << std::endl;
-	std::cout << get_matrix() << std::endl;
+	#if DEBUG
+		std::cout << "\nInput exponent matrix: " << std::endl;
+		std::cout << get_matrix() << std::endl;
+	#endif
 
 	return bsmooth_values;
 }
