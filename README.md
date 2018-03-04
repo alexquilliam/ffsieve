@@ -1,4 +1,7 @@
 # ffsieve
+
+**Note**: ffsieve is not garunteed to factor a number correctly, or even work, if the number is not the product of two primes.
+
 ## Build & Run
 Build with:
 ```sh
