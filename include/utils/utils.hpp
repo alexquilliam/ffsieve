@@ -7,6 +7,7 @@
 #include <iostream>
 #include <string>
 #include <cmath>
+#include <chrono>
 
 //gmp includes
 #include <gmp.h>
@@ -18,6 +19,7 @@ typedef std::vector<int> int_vector;
 
 //defines
 #define DEBUG 0
+#define VERBOSE 1
 
 /*Print Functions*/
 
@@ -40,6 +42,8 @@ template<typename T> std::ostream& operator<< (std::ostream& out, const std::vec
 
     return out;
 }
+
+long get_current_time();
 
 bool check(mpz_class n, mpz_vector factors);
 

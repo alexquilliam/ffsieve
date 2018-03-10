@@ -8,8 +8,8 @@ INCDIR := $(shell find include -type d)
 BUILDDIR := obj
 SRCEXT := cpp
 
-CFLAGS := -Wall -g
-LIB := -lgmp -lgmpxx
+CFLAGS := -Wall -g -O2 -ftree-loop-vectorize -march=native
+LIB := -lgmp -lgmpxx -l:libprofiler.so.0.4.8
 INC := $(addprefix -I,$(INCDIR))
 
 SOURCES := $(shell find $(SRCDIR) -type f -name *.$(SRCEXT))
