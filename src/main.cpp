@@ -5,7 +5,7 @@
 #include <qsieve.hpp>
 
 int main(int argc, char **argv) {
-	mpz_class semiprime_one("2000000001");
+	mpz_class semiprime_one("200000000001");
 	mpz_class sp_one_stop(semiprime_one + 1000);
 	for(; semiprime_one < sp_one_stop; semiprime_one += 2) {
 		if(mpz_probab_prime_p(semiprime_one.get_mpz_t(), 50) != 2) continue;

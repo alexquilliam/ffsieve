@@ -19,6 +19,7 @@ all: $(TARGET)
 
 clean:
 	@$(RM) -rf $(BUILDDIR)
+	@rm $(TARGET)
 
 -include $(OBJECTS:.o=.d)
 

@@ -9,6 +9,7 @@
 //std includes
 #include <fstream>
 #include <string>
+#include <bitset>
 
 class Collector {
 	private:
@@ -19,6 +20,8 @@ class Collector {
 		long get_bound(mpz_class n);
 		int_vector get_factor_base(mpz_class n, long bound);
 		int get_cache_size(int cache_index);
+		int_vector msqrt(mpz_class a, int p);
+		mpz_vector sieve(mpz_class n, int_vector factor_base, int block_size);
 
 	public:
 		mpz_vector collect(mpz_class n);

@@ -87,3 +87,14 @@ double ln(mpz_class n) {
 
 	return ppart_log + upart_log;
 }
+
+//an implementation of the modulus operator that works properly on negative numerators
+long long modn(long long a, long long b) {
+	long long rem = a % b;
+
+	if(rem < 0) {
+		rem += b;
+	}
+
+	return rem;
+}

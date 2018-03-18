@@ -1,7 +1,6 @@
 #include <collector.hpp>
 
 mpz_vector Collector::collect(mpz_class n) {
-	//setup
 	long bound = get_bound(n);
 
 	#if VERBOSE
@@ -14,69 +13,116 @@ mpz_vector Collector::collect(mpz_class n) {
 		std::cout << "Got factor base." << std::endl;
 	#endif
 
-	#if DEBUG
-		std::cout << "\nFactor base:" << std::endl;
-		std::cout << factor_base << std::endl;
-	#endif
-
 	mpz_class n_sqrt(sqrt(n));
-	long block_size = 75;//get_cache_size(1) / sizeof(mpz_class);
+	long block_size = 100;//get_cache_size(1) / sizeof(mpz_class);
 
 	#if VERBOSE
 		std::cout << "Got polynomial block size." << std::endl;
 	#endif
 
-	int num_blocks = 0;
-	mpz_vector poly_values = generate_poly_values(n, n_sqrt + (num_blocks++ * block_size), block_size);
-	poly_values.erase(poly_values.begin()); //remove negative value
-
-	//std::cout << poly_values << std::endl;
-
-	mpz_vector bsmooth_values(0);
-	std::vector<std::vector<int>> exp_vec(0, std::vector<int>(0));
-
-	long i = 0;
-	size_t factor_base_size = factor_base.size();
-	while(bsmooth_values.size() < factor_base_size) {
-		int_vector exp_vector = is_bsmooth(poly_values[i], factor_base);
-
-		if(exp_vector.size() != 0) {
-			bsmooth_values.push_back(poly_values[i]);
-			exp_vec.push_back(exp_vector);
-		}
-
-		i++;
-
-		if(i == block_size) {
-			poly_values.clear();
-			std::vector<mpz_class>(0).swap(poly_values);
-			poly_values = generate_poly_values(n, n_sqrt + (num_blocks++ * block_size), block_size);
-			i = 0;
-		}
-	}
+	mpz_vector bsmooth_values = sieve(n, factor_base, block_size);
 
 	#if VERBOSE
 		std::cout << "Got bsmooth values." << std::endl;
 	#endif
 
-	#if DEBUG
-		std::cout << "\nPolynomial values:" << std::endl;
-		std::cout << poly_values << std::endl;
+	return bsmooth_values;
+}
 
-		std::cout << "\nb-smooth values:" << std::endl;
-		std::cout << bsmooth_values << std::endl;
+//sieve, returning the bsmooth values
+mpz_vector Collector::sieve(mpz_class n, int_vector factor_base, int block_size) {
+	const size_t factor_base_size = factor_base.size();
 
-		std::cout << "\nb-smooth values size: " << bsmooth_values.size() << ", factor base size: " << factor_base.size() << std::endl;
-	#endif
+	mpz_vector bsmooth_values(0);
+	std::vector<std::vector<int>> exp_mat(0, std::vector<int>(0));
 
-	exp_matrix = Matrix(exp_vec);
+	mpz_class n_sqrt(sqrt(n));
 
-	#if DEBUG
-		std::cout << "\nInput exponent matrix: " << std::endl;
-		std::cout << get_matrix() << std::endl;
-	#endif
+	//generate the first batch of polynomials
+	int num_blocks = 0;
+	mpz_vector poly_chunk = generate_poly_values(n, n_sqrt + (num_blocks++ * block_size) + 1, block_size);
+
+	//get the start location of the sieve (the modular square roots) for each smooth factor
+	int_vector sieve_start(factor_base_size * 2);
+	long long ceil_n_sqrt(n_sqrt.get_ui() + 1);
+	for(size_t i = 0, j = 0; i < factor_base_size; i++, j += 2) {
+		int_vector solutions = msqrt(n, factor_base[i]);
+
+		if(solutions[0] == solutions[1]) {
+			sieve_start[j] = modn(solutions[0] - ceil_n_sqrt, factor_base[i]);
+			sieve_start[j + 1] = -1;
+		}else {
+			sieve_start[j] = modn(solutions[0] - ceil_n_sqrt, factor_base[i]);
+			sieve_start[j + 1] = modn(solutions[1] - ceil_n_sqrt, factor_base[i]);
+		}
+	}
+
+	std::vector<double> factor_base_log(factor_base_size);
+	for(size_t i = 0; i < factor_base_size; i++) {
+		factor_base_log[i] = log(factor_base[i]);
+	}
+
+	//begin sieving until a sufficent number of bsmooth values have been found
+	while(bsmooth_values.size() < factor_base_size) {
+		int_vector sieve(poly_chunk.size());
+
+		//start sieving
+		for(size_t i = 0, j = 0; i < factor_base_size; i++, j += 2) {
+			for(size_t k = j; k < j + 2; k++) {
+				if(sieve_start[k] == -1) {
+					continue;
+				}
+
+				size_t l;
+				for(l = sieve_start[k]; l < poly_chunk.size(); l += factor_base[i]) {
+					sieve[l] += factor_base_log[i];
+				}
+
+				sieve_start[k] = (l + factor_base[i]) % block_size;
+			}
+		}
+
+		double x = .2;
+		double cutoff = log((2 * x) * n_sqrt.get_ui());
+		for(size_t i = 0; i < poly_chunk.size(); i++) {
+			if(sieve[i] >= cutoff) {
+				int_vector exp_vec = is_bsmooth(poly_chunk[i], factor_base);
+				if(exp_vec.size() != 0) {
+					bsmooth_values.push_back(poly_chunk[i]);
+					exp_mat.push_back(exp_vec);
+
+					if(bsmooth_values.size() >= factor_base_size) {
+						exp_matrix = Matrix(exp_mat);
+						return bsmooth_values;
+					}
+				}
+			}
+		}
+
+		poly_chunk = generate_poly_values(n, n_sqrt + (num_blocks++ * block_size) + 1, block_size);
+	}
+
+	exp_matrix = Matrix(exp_mat);
+	std::cout << exp_matrix << std::endl;
 
 	return bsmooth_values;
+}
+
+//find the modular square root (the solution to r^2 === a (mod p)) via brute force
+int_vector Collector::msqrt(mpz_class a, int p) {
+	int_vector sqrts(2);
+
+	mpz_class mpz_p(p);
+	mpz_class mod_a(a % mpz_p);
+	for(mpz_class r(0); r < a; r++) {
+		if((r * r) % mpz_p == mod_a) {
+			sqrts[0] = r.get_ui();
+			sqrts[1] = p - r.get_ui();
+			return sqrts;
+		}
+	}
+
+	return sqrts;
 }
 
 Matrix Collector::get_matrix() {

@@ -9,8 +9,9 @@
 Matrix::Matrix() {};
 
 Matrix::Matrix(std::vector<std::vector<int>> vec) {
+	vthis.resize(vec.size());
 	for(size_t i = 0, vec_size = vec.size(); i < vec_size; i++) {
-		vthis.push_back(vec[i]);
+		vthis[i] = vec[i];
 	}
 }
 
