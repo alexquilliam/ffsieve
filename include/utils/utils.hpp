@@ -2,12 +2,17 @@
 
 #pragma once
 
-//std includes
+//std c++ includes
 #include <vector>
 #include <iostream>
 #include <string>
 #include <cmath>
 #include <chrono>
+#include <stdexcept>
+#include <climits>
+#include <algorithm>
+#include <thread>
+#include <future>
 
 //gmp includes
 #include <gmp.h>

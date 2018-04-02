@@ -1,5 +1,7 @@
 #include <collector.hpp>
 
+size_t BSMOOTH_VALUE_CUTOFF = 0;
+
 mpz_vector Collector::collect(mpz_class n) {
 	long bound = get_bound(n);
 
@@ -9,12 +11,14 @@ mpz_vector Collector::collect(mpz_class n) {
 
 	int_vector factor_base = get_factor_base(n, bound);
 
+	BSMOOTH_VALUE_CUTOFF = factor_base.size() + 1;
+
 	#if VERBOSE
 		std::cout << "Got factor base." << std::endl;
 	#endif
 
 	mpz_class n_sqrt(sqrt(n));
-	long block_size = 100;//get_cache_size(1) / sizeof(mpz_class);
+	long block_size = 1000; //100000
 
 	#if VERBOSE
 		std::cout << "Got polynomial block size." << std::endl;
@@ -29,6 +33,9 @@ mpz_vector Collector::collect(mpz_class n) {
 	return bsmooth_values;
 }
 
+int canidates = 0, confirmed = 0, total = 0;
+double sieve_average = 0;
+
 //sieve, returning the bsmooth values
 mpz_vector Collector::sieve(mpz_class n, int_vector factor_base, int block_size) {
 	const size_t factor_base_size = factor_base.size();
@@ -40,21 +47,32 @@ mpz_vector Collector::sieve(mpz_class n, int_vector factor_base, int block_size)
 
 	//generate the first batch of polynomials
 	int num_blocks = 0;
-	mpz_vector poly_chunk = generate_poly_values(n, n_sqrt + (num_blocks++ * block_size) + 1, block_size);
+	mpz_vector poly_chunk = generate_poly_values(n, (num_blocks++ * block_size) - (2 * block_size), block_size);
 
 	//get the start location of the sieve (the modular square roots) for each smooth factor
-	int_vector sieve_start(factor_base_size * 2);
-	long long ceil_n_sqrt(n_sqrt.get_ui() + 1);
-	for(size_t i = 0, j = 0; i < factor_base_size; i++, j += 2) {
-		int_vector solutions = msqrt(n, factor_base[i]);
+	std::vector<std::vector<int>> sieve_start = generate_solutions(n, factor_base, 1);
 
-		if(solutions[0] == solutions[1]) {
-			sieve_start[j] = modn(solutions[0] - ceil_n_sqrt, factor_base[i]);
-			sieve_start[j + 1] = -1;
-		}else {
-			sieve_start[j] = modn(solutions[0] - ceil_n_sqrt, factor_base[i]);
-			sieve_start[j + 1] = modn(solutions[1] - ceil_n_sqrt, factor_base[i]);
+	int max_exp = 2;
+	int_vector ext_factor_base(0);
+	const size_t ext_factor_base_size = factor_base_size * (max_exp - 1);
+
+	std::vector<std::vector<int>> ext_sieve_start(0);
+
+	int_vector small_primes(0);
+	for(size_t i = 0; i < factor_base_size / 2; i++) {
+		small_primes.push_back(factor_base[i]);
+	}
+
+	for(int e = 2; e <= max_exp; e++) {
+		int_vector tmp_factor_base(small_primes.size());
+		for(size_t i = 0; i < small_primes.size(); i++) {
+			tmp_factor_base[i] = pow(small_primes[i], e);
 		}
+
+		std::vector<std::vector<int>> tmp_solutions = generate_solutions(n, small_primes, e);
+
+		ext_factor_base.insert(ext_factor_base.end(), tmp_factor_base.begin(), tmp_factor_base.end());
+		ext_sieve_start.insert(ext_sieve_start.end(), tmp_solutions.begin(), tmp_solutions.end());
 	}
 
 	std::vector<double> factor_base_log(factor_base_size);
@@ -62,67 +80,254 @@ mpz_vector Collector::sieve(mpz_class n, int_vector factor_base, int block_size)
 		factor_base_log[i] = log(factor_base[i]);
 	}
 
-	//begin sieving until a sufficent number of bsmooth values have been found
-	while(bsmooth_values.size() < factor_base_size) {
-		int_vector sieve(poly_chunk.size());
+	std::vector<double> ext_factor_base_log(ext_factor_base_size);
+	for(size_t i = 0; i < ext_factor_base_size; i++) {
+		ext_factor_base_log[i] = log(ext_factor_base[i]);
+	}
 
-		//start sieving
-		for(size_t i = 0, j = 0; i < factor_base_size; i++, j += 2) {
-			for(size_t k = j; k < j + 2; k++) {
-				if(sieve_start[k] == -1) {
+	//begin sieving until a sufficent number of bsmooth values have been found
+	while(bsmooth_values.size() <= BSMOOTH_VALUE_CUTOFF) {
+		std::vector<double> sieve(poly_chunk.size());
+
+		//first sieve pass
+		for(size_t i = 0; i < factor_base_size; i++) {
+			for(size_t j = 0; j < sieve_start[i].size(); j++) {
+				if(sieve_start[i][j] == 0) {
 					continue;
 				}
 
 				size_t l;
-				for(l = sieve_start[k]; l < poly_chunk.size(); l += factor_base[i]) {
+				for(l = sieve_start[i][j]; l < poly_chunk.size(); l += factor_base[i]) {
 					sieve[l] += factor_base_log[i];
 				}
 
-				sieve_start[k] = (l + factor_base[i]) % block_size;
+				sieve_start[i][j] = (l + factor_base[i]) % block_size;
 			}
 		}
 
-		double x = .2;
-		double cutoff = log((2 * x) * n_sqrt.get_ui());
-		for(size_t i = 0; i < poly_chunk.size(); i++) {
-			if(sieve[i] >= cutoff) {
+		//second sieve pass; sieve for prime powers
+		for(size_t i = 0; i < ext_sieve_start.size(); i++) {
+			for(size_t j = 0; j < ext_sieve_start[i].size(); j++) {
+				if(ext_sieve_start[i][j] == 0) {
+					continue;
+				}
+
+				int l;
+				for(l = ext_sieve_start[i][j]; l < block_size; l += ext_factor_base[i]) {
+					sieve[l] += ext_factor_base_log[i];
+				}
+
+				ext_sieve_start[i][j] = (l + ext_factor_base[i]) % block_size;
+			}
+		}
+
+		//filter_smooth_values(n, poly_chunk, sieve, factor_base, &bsmooth_values, &exp_mat, cutoff);
+		for(int i = 0; i < block_size; i++) {
+			total++;
+
+			//int cutoff = log((2 * (i + 1)) * n_sqrt.get_ui());
+			if(sieve[i] >= 0) {
+				canidates++;
 				int_vector exp_vec = is_bsmooth(poly_chunk[i], factor_base);
 				if(exp_vec.size() != 0) {
+					//std::cout << poly_chunk[i] << ", " << sieve[i] << ", " << cutoff << ", " << n_sqrt << std::endl;
+					sieve_average += sieve[i];
+					confirmed++;
 					bsmooth_values.push_back(poly_chunk[i]);
 					exp_mat.push_back(exp_vec);
 
-					if(bsmooth_values.size() >= factor_base_size) {
+					if(bsmooth_values.size() >= BSMOOTH_VALUE_CUTOFF) {
 						exp_matrix = Matrix(exp_mat);
+						std::cout.precision(3);
+						std::cout << confirmed << " confirmed out of " << canidates << " canidates (" << ((double) confirmed / canidates) * 100 << "% passage rate), out of " << total << " total (" << ((double) canidates) * 100 / total << "% detection rate)." << std::endl;
+						std::cout << "Average sieve value: " << sieve_average / confirmed << std::endl;
 						return bsmooth_values;
 					}
 				}
 			}
 		}
 
-		poly_chunk = generate_poly_values(n, n_sqrt + (num_blocks++ * block_size) + 1, block_size);
+		poly_chunk = generate_poly_values(n, (num_blocks++ * block_size) - (2 * block_size), block_size);
 	}
-
-	exp_matrix = Matrix(exp_mat);
-	std::cout << exp_matrix << std::endl;
 
 	return bsmooth_values;
 }
 
-//find the modular square root (the solution to r^2 === a (mod p)) via brute force
-int_vector Collector::msqrt(mpz_class a, int p) {
-	int_vector sqrts(2);
+std::vector<std::vector<int>> Collector::generate_solutions(mpz_class n, int_vector factor_base, int power) {
+	const size_t factor_base_size = factor_base.size();
+	long long n_sqrt = mpz_class(sqrt(n) + 1).get_ui();
+	std::vector<std::vector<int>> all_solutions(0);
 
-	mpz_class mpz_p(p);
-	mpz_class mod_a(a % mpz_p);
-	for(mpz_class r(0); r < a; r++) {
-		if((r * r) % mpz_p == mod_a) {
-			sqrts[0] = r.get_ui();
-			sqrts[1] = p - r.get_ui();
-			return sqrts;
+	for(size_t i = 0; i < factor_base_size; i++) {
+		int_vector solutions = msqrt_pow(n, factor_base[i], power);
+
+		if(std::adjacent_find(solutions.begin(), solutions.end(), std::not_equal_to<int>()) == solutions.end()) {
+			solutions[0] = modn(solutions[0] - n_sqrt, factor_base[i]);
+
+			solutions.resize(1);
+			all_solutions.push_back(solutions);
+			continue;
+		}
+
+		for(size_t j = 0; j < solutions.size(); j++) {
+			solutions[j] = modn(solutions[j] - n_sqrt, factor_base[i]);
+		}
+
+		all_solutions.push_back(solutions);
+	}
+
+	return all_solutions;
+}
+
+int_vector Collector::msqrt_pow(mpz_class n, int p, int e) {
+	if(n % pow(p, e) == 0) {
+		return {0, 0};
+	}
+
+	int_vector new_solutions(2);
+
+	//deal with powers of 2
+	if(p == 2) {
+		long p_exp = pow(2, e);
+		int residue = mpz_class(n % p_exp).get_ui();
+
+		if(e == 2) {
+			if(residue == 1) {
+				new_solutions = {1, 3};
+			}else {
+				new_solutions.resize(0);
+			}
+		}else if(e == 3) {
+			if(residue == 1) {
+				new_solutions = {1, 3, 5, 7};
+			}else {
+				new_solutions.resize(0);
+			}
+		}else {
+			if(n % 8 == 1) {
+				new_solutions.resize(4);
+
+				int inc = 0;
+				for(int i = 1; i < p_exp; i += 2) {
+					if((i * i) % p_exp == residue) {
+						new_solutions[inc++] = i;
+					}
+				}
+			}else {
+				new_solutions.resize(0);
+			}
+		}
+
+		return new_solutions;
+	}
+
+	int_vector orig_solutions = msqrt(n, p);
+	if(e == 1) {
+		return orig_solutions;
+	}
+
+	//the rest of the powers
+	mpz_class p_exp(pow(p, e));
+	for(int i = 0; i < 2; i++) {
+		mpz_class x(orig_solutions[i]);
+		mpz_class c(n);
+
+		mpz_powm_ui(x.get_mpz_t(), x.get_mpz_t(), pow(p, e - 1), p_exp.get_mpz_t());
+
+		int c_exp = ((pow(p, e) - (2 * pow(p, e - 1)) + 1)) / 2;
+		mpz_powm_ui(c.get_mpz_t(), c.get_mpz_t(), c_exp, p_exp.get_mpz_t());
+
+		mpz_class res((x * c) % p_exp);
+		if(res.fits_sint_p()) {
+			new_solutions[i] = res.get_ui();
+		}else {
+			throw std::overflow_error("msqrt_pow: value is too large to be converted to int.");
 		}
 	}
 
-	return sqrts;
+	return new_solutions;
+}
+
+//find the modular square root (the solution to r^2 === a (mod p)) with the tonelli-shanks algorithm
+int_vector Collector::msqrt(mpz_class n, int p) {
+	if(n % p == 0) {
+		return {0, 0};
+	}
+
+	mpz_class mpz_p(p);
+	mpz_class product(0);
+
+	int s = p - 1, e = 0;
+	while(s % 2 == 0) {
+		s /= 2;
+		e++;
+	}
+
+	mpz_class q(2);
+	while(true) {
+		mpz_powm_ui(product.get_mpz_t(), q.get_mpz_t(), (p - 1) / 2, mpz_p.get_mpz_t());
+
+		if(product == p - 1) {
+			break;
+		}
+
+		q++;
+	}
+
+	mpz_class x(0);
+	mpz_class b(0);
+	mpz_class g(0);
+
+	mpz_powm_ui(x.get_mpz_t(), n.get_mpz_t(), (s + 1) / 2, mpz_p.get_mpz_t());
+	mpz_powm_ui(b.get_mpz_t(), n.get_mpz_t(), s, mpz_p.get_mpz_t());
+	mpz_powm_ui(g.get_mpz_t(), q.get_mpz_t(), s, mpz_p.get_mpz_t());
+
+	int r = e;
+
+	while(true) {
+		int m = 0;
+		while(true) {
+			mpz_powm_ui(product.get_mpz_t(), b.get_mpz_t(), pow(2, m), mpz_p.get_mpz_t());
+			if(product == 1) {
+				break;
+			}
+
+			m++;
+		}
+
+		if(m == 0) {
+			int_vector sqrts(2);
+			if(x.fits_sint_p()) {
+				sqrts[0] = x.get_ui();
+				sqrts[1] = p - x.get_ui();
+			}else {
+				throw std::overflow_error("msqrt: value is too large to be converted to int.");
+			}
+
+			return sqrts;
+		}
+
+		mpz_powm_ui(product.get_mpz_t(), g.get_mpz_t(), pow(2, r - m - 1), mpz_p.get_mpz_t());
+		x = (x * product) % mpz_p;
+
+		mpz_powm_ui(g.get_mpz_t(), g.get_mpz_t(), pow(2, r - m), mpz_p.get_mpz_t());
+
+		b = (b * g) % mpz_p;
+
+		if(b == 1) {
+			int_vector sqrts(2);
+			if(x.fits_sint_p()) {
+				sqrts[0] = x.get_ui();
+				sqrts[1] = p - x.get_ui();
+			}else {
+				throw std::overflow_error("msqrt: value is too large to be converted to int.");
+			}
+
+			return sqrts;
+		}
+
+		r = m;
+	}
 }
 
 Matrix Collector::get_matrix() {
@@ -204,20 +409,18 @@ mpz_vector Collector::generate_poly_values(mpz_class n, mpz_class poly_start, lo
 	mpz_vector poly_values(block_size);
 	mpz_class poly_end(poly_start + block_size);
 
-	//avoid excessive reallocation
-	mpz_class x_size(poly_start + block_size);
-
-	mpz_t x;
-	mpz_init2(x, mpz_sizeinbase(x_size.get_mpz_t(), 2));
-	mpz_set(x, poly_start.get_mpz_t());
+	mpz_class x(poly_start);
 
 	int i = 0;
 	while(i < block_size) {
-		mpz_mul(poly_values[i].get_mpz_t(), x, x);
-		poly_values[i] -= n;
+		poly_values[i] = (x * x) - n;
+
+		if(poly_values[i] < 0) {
+			poly_values[i] *= -1;
+		}
 
 		i++;
-		mpz_add_ui(x, x, 1);
+		x++;
 	}
 
 	return poly_values;
@@ -237,8 +440,9 @@ int_vector Collector::get_factor_base(mpz_class n, long bound) {
 		}
 	}
 
-	//the legendre symbol is not defined at 2, but all numbers have a quadratic residue mod 2
-	if(factor_base[0] != 2) {
+	//deal with the special case of 2
+	int residue = mpz_class(n % 8).get_ui();
+	if(residue == 1 || residue == 7) {
 		factor_base.insert(factor_base.begin(), 2);
 	}
 

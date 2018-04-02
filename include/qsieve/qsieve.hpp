@@ -10,4 +10,7 @@
 class QuadraticSieve {
 	public:
 		mpz_vector get_factors(mpz_class value);
+		static mpz_vector get_factors_static(mpz_class value) {
+			return QuadraticSieve().get_factors(value);
+		}
 };

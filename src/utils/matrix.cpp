@@ -20,7 +20,7 @@ Matrix::Matrix(std::vector<std::vector<int>> vec) {
 void Matrix::mod() {
 	for(size_t i = 0, n = vthis[0].size(); i < n; i++) {
 		for(size_t j = 0, m = vthis.size(); j < m; j++) {
-			vthis[i][j] %= 2;
+			vthis[j][i] %= 2;
 		}
 	}
 }
@@ -38,42 +38,55 @@ void Matrix::transpose() {
 }
 
 void Matrix::to_rref() {
-	std::vector<std::vector<int>> vec = vthis;
-	int m = vec.size();
-	int n = vec[0].size();
+	size_t m = vthis.size();
+	size_t n = vthis[0].size();
 
-	//reduction
-	for(int pivot = 0; pivot < n; pivot++) {
-		if(vec[pivot][pivot] == 0) {
-			for(int i = pivot; i < n; i++) {
-				if(vec[i][pivot] == 1) {
-					vec[i].swap(vec[pivot]);
-				}
+	std::vector<std::vector<int>> mat = vthis;
+
+	int current_row = 0;
+	int pivot = 0, next_pivot = 0;
+	for(size_t c = 0; c < n; c++) {
+		next_pivot = -1;
+
+		for(size_t i = current_row; i < m; i++) {
+			if(mat[i][c]) {
+				next_pivot = i;
+				break;
 			}
 		}
 
-		for(int i = pivot + 1; i < n; i++) {
-			if(vec[i][pivot] == 1) {
-				for(int j = 0; j < m; j++) {
-					vec[i][j] ^= vec[pivot][j];
+		if(next_pivot == -1) {
+			continue;
+		}
+
+		if(next_pivot != current_row) {
+			mat[next_pivot].swap(mat[current_row]);
+		}
+
+		pivot = current_row;
+		current_row++;
+
+		for(size_t i = current_row; i < m; i++) {
+			if(mat[i][c]) {
+				for(size_t j = 0; j < n; j++) {
+					mat[i][j] ^= mat[pivot][j];
 				}
 			}
 		}
 	}
 
-	//back substitution
-	int line;
+	size_t line;
 	for(line = 0; line < m; line++) {
-		if(vec[line][line] != 1) {
+		if(mat[line][line] != 1) {
 			break;
 		}
 	}
 
 	for(int i = line - 1; i >= 0; i--) {
 		for(int j = i - 1; j >= 0; j--) {
-			if(vec[j][i]) {
-				for(int k = 0; k < m; k++) {
-					vec[j][k] ^= vec[i][k];
+			if(mat[j][i]) {
+				for(size_t k = 0; k < m; k++) {
+					mat[j][k] ^= mat[i][k];
 				}
 			}
 		}
@@ -82,15 +95,20 @@ void Matrix::to_rref() {
 	std::vector<int> null_space(m);
 	null_space[line] = 1;
 
-	for(int i = 0; i < line; i++) {
-		null_space[i] = vec[i][line];
+	for(size_t i = 0; i < line; i++) {
+		null_space[i] = mat[i][line];
+	}
+
+	for(size_t i = 0; i < null_space.size(); i++) {
+		if(null_space[i] != 0) {
+			null_space[i] = 1;
+		}
 	}
 
 	vthis.null_space = null_space;
 
-	//put results back into the matrix
-	for(int i = 0; i < m; i++) {
-		vthis[i].swap(vec[i]);
+	for(size_t i = 0; i < m; i++) {
+		vthis[i].swap(mat[i]);
 	}
 }
 
